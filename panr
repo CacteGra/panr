@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -o nounset
-set -o errexit
 
 
 BLUETOOTH_NAME="panr"
@@ -62,7 +61,7 @@ function bridge_create() {
 	sudo brctl addbr "$1"
 	sudo brctl setfd "$1" 0
 	sudo brctl stp "$1" off
-	BRIDGE_IP=${BRIDGE_IP:-$(ip_inet_next)}
+	BRIDGE_IP="10.0.0.0"
 	sudo ifconfig "$1" $(ipcalc_hostmin "${BRIDGE_IP}") netmask $(ipcalc_netmask "${BRIDGE_IP}") up
 }
 
@@ -91,7 +90,7 @@ function ip_inet_next() {
 		ipcalc_network_prefix "${IP}"
 	done) | tail -1 | cut --delimiter "." --fields 3)
 	OCTET=$(expr ${OCTET} + 1)
-	ipcalc_hostmin "192.168.${OCTET}.0"
+	echo "192.168.${OCTET}.0"
 }
 
 
@@ -248,16 +247,52 @@ if [ "${BRIDGE_DHCP}" == "true" ]; then
 	echo ""
 fi
 
-
 # Main loop
+was_connected="true"
+already_connected="false"
 while true; do
+	# Checking internet connection
+	wget -q --tries=3 --timeout=3 --spider http://google.com
+	if [[ $? -eq 0 ]]; then
+	was_connected="false"
+	echo "connected"
+	if [ "${already_connected}" == "false" ]; then
+	already_connected="true"
+	sysctl net.ipv4.ip_forward=1
+	iptables -F
+	iptables -t nat -F
+	iptables -t mangle -F
+	# Find interface conected to the Internet
+	INT=$(/sbin/ip route | awk '/default/ { print $5 }')
+	for available_interface in ${INT}; do
+		iptables -t nat -A POSTROUTING -o ${available_interface} -j MASQUERADE
+		break
+	done
+	fi
+	else
+	echo "Not connected removing routing"
+	if [ "${was_connected}" == "true" ]; then
+	iptables -F
+	iptables -t nat -F
+	iptables -t mangle -F
+	INT=$(/sbin/ip route | awk '/default/ { print $5 }')
+	# Find interface conected to the Internet
+	for available_interface in ${INT}; do
+		iptables -t nat -A POSTROUTING -o ${available_interface} -j MASQUERADE
+		break
+	done
+	was_connected="false"
+	already_connected="false"
+	fi
+	fi
+
 	# Un-bridge interfaces that no longer exist
 	for INTERFACE in $(comm -23 <(bridges_interfaces) <(interfaces) | grep --invert-match '^bnep'); do
 		echo "Un-bridging ${INTERFACE} ..."
 		sudo brctl delif "${BRIDGE_NAME}" "${INTERFACE}"
 		echo ""
 	done
-	
+
 	# Bridge new interfaces
 	for INTERFACE in $(comm -23 <(interfaces) <(bridges_interfaces)); do
 		echo "Bridging ${INTERFACE} ..."
