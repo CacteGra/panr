@@ -3,6 +3,7 @@ A tool to create a basic Bluetooth PAN network.
 
 ## Dependencies
 `panr` requires some networking utilities and [Mike Kazantsev's](https://github.com/mk-fg) [bt-pan](https://github.com/mk-fg/fgtk/blob/master/bt-pan) tool.
+--> bt-pan is now working in Python3 as well in [this repository](https://github.com/CacteGra/fgtk/blob/master/bt-pan).
 ```bash
 $ sudo apt-get install bluez bridge-utils net-tools python python-dbus ipcalc udhcpd
 $ wget https://raw.githubusercontent.com/mk-fg/fgtk/master/bt-pan && chmod +x bt-pan
